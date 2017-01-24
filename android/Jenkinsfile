@@ -1,31 +1,27 @@
 pipeline {
-    // Agent label to be used in this pipeline
-    agent label: 'master'
-
-    // Environment variables
-    environment {
-        ANDROID_HOME = '/opt/android-sdk/'
+    agent {
+        label 'android'
     }
 
-    // Pipeline stages
+    environment {
+        ANDROID_HOME = '/opt/android-sdk'
+    }
+
     stages {
-        // First stage: get the source code from git
-        stage('Checkout code') {
+        stage('Checkout') {
             steps {
-                // I am using git explicitly but you can run "checkout scm"
-                git url: 'git1@git.digio.es:app_and_bizkaia',
-                    branch: 'develop'
+                notifyBuild()
+                
+                git url: 'git@github.com:membrive/example-app',
+                    branch: 'master'
             }
         }
 
-        // Second stage: run the Android app tests
-        stage('Run tests') {
+        stage('Test') {
             steps {
-                // First step of this stage
                 sh 'chmod +x gradlew'
 
-                // Second step, in this case I am running a groovy script!
-                // I want junit to run both in case all tests pass or not
+                // report junit results whether tests pass or fail
                 script {
                     try {
                         sh './gradlew clean test --continue'
@@ -38,22 +34,19 @@ pipeline {
             }
         }
 
-        // Third stage: build de app
-        stage('Build app') {
+        stage('Build') {
             steps {
                 sh './gradlew clean assemble'
             }
         }
     }
 
-    // Run after all stages success
     post {
         aborted {
             notifyBuild('ABORTED')
         }
 
         success {
-            // Archive all generated APK as artifacts
             archive 'app/build/outputs/apk/*.apk'
             notifyBuild('SUCCESSFUL')
         }
@@ -68,12 +61,9 @@ pipeline {
     }
 }
 
-// External functions
 def notifyBuild(String buildStatus = 'STARTED') {
-    // build status of null means successful
     buildStatus =  buildStatus ?: 'SUCCESSFUL'
 
-    // Default values
     def colorName = 'RED'
     def colorCode = '#FF0000'
     def subject = "${buildStatus}: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'"
@@ -81,7 +71,6 @@ def notifyBuild(String buildStatus = 'STARTED') {
     def details = """<p>STARTED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':</p>
         <p>Check console output at &QUOT;<a href='${env.BUILD_URL}'>${env.JOB_NAME} [${env.BUILD_NUMBER}]</a>&QUOT;</p>"""
 
-    // Override default values based on build status
     if (buildStatus == 'STARTED') {
         color = 'YELLOW'
         colorCode = '#FFFF00'
@@ -93,6 +82,5 @@ def notifyBuild(String buildStatus = 'STARTED') {
         colorCode = '#FF0000'
     }
 
-    // Send notifications
     slackSend (color: colorCode, message: summary)
 }
